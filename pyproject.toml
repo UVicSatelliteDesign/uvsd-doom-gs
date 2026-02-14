@@ -7,5 +7,4 @@ requires-python = ">=3.13"
 dependencies = [
     "pyqt6>=6.10.2",
     "pysdl3>=0.9.10b0",
-    "pyside6>=6.10.2",
 ]
