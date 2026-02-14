@@ -2,6 +2,9 @@ import signal
 import sys
 import time
 
+from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
+from messages import DOOMKeystroke, DOOMKeystrokeList
+
 # import sdl3
 from PyQt6 import QtGui
 from PyQt6.QtCore import Qt, QTimer
@@ -21,9 +24,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
-from messages import DOOMKeystroke, DOOMKeystrokeList
 
 
 def perf_counter_ms() -> int:
@@ -112,6 +112,7 @@ class KeyRecordingPage(QWidget):
         hist_tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         hist_tree.setHeaderHidden(True)
         hist_tree.setModel(self.tree_model)
+        hist_tree.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         btn_box = QWidget()
         btn_layout = QHBoxLayout()
