@@ -1,11 +1,17 @@
+import ctypes
 import signal
 import sys
 import time
 
+import sdl3
 from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
-from messages import DOOMKeystroke, DOOMKeystrokeList
-
-# import sdl3
+from messages import (
+    SDL_AXES_TO_BUTTON_CODES,
+    SDL_BUTTONS_TO_BUTTON_CODES,
+    DOOMGamepadTickList,
+    DOOMKeystroke,
+    DOOMKeystrokeList,
+)
 from PyQt6 import QtGui
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
@@ -67,6 +73,7 @@ class KeyRecordingPage(QWidget):
         self.key_timer = QTimer()
         self.key_timer.setInterval(1000 // 30)  # 30 reads/sec
         self.key_timer.timeout.connect(self.read_state)
+        self.key_timer.timeout.connect(self.poll_sdl_events)
         self.key_timer.start()
 
         self.progressbar_timer = QTimer()
@@ -76,9 +83,29 @@ class KeyRecordingPage(QWidget):
 
         # The set of currently pressed keyboard keys
         self.active_keys: set[Qt.Key] = set()
+        self.joystick_x = 0
+        self.joystick_y = 0
+        self.active_joystick_keys = 0
         # The last time a keystroke was recorded
         self.last_key_update = 0
         self.key_list = DOOMKeystrokeList()
+        self.joystick_list = DOOMGamepadTickList()
+
+        sdl3.SDL_Init(sdl3.SDL_INIT_GAMEPAD)  # type: ignore
+        self.gamepad = None
+
+        count = ctypes.c_int()
+        joystick_ids = sdl3.SDL_GetJoysticks(ctypes.byref(count))  # type: ignore
+
+        if joystick_ids:
+            for i in range(count.value):
+                instance_id = joystick_ids[i]  # type: ignore
+                if sdl3.SDL_IsGamepad(instance_id):
+                    # Open the controller
+                    self.gamepad = sdl3.SDL_OpenGamepad(instance_id)
+                    if self.gamepad:
+                        print(f"Connected to: {sdl3.SDL_GetGamepadName(self.gamepad)}")
+                        break
 
         self.init_ui()
 
@@ -135,12 +162,24 @@ class KeyRecordingPage(QWidget):
 
         self.setLayout(layout)
 
+    def closeEvent(self, a0):
+        if self.gamepad:
+            sdl3.SDL_CloseGamepad(self.gamepad)
+        sdl3.SDL_Quit()
+
+    def joystick_active(self) -> bool:
+        return bool(self.joystick_x or self.joystick_y or self.active_joystick_keys)
+
     def read_state(self) -> None:
         now = perf_counter_ms()
         elapsed = now - self.last_key_update
 
         # If no keys are pressed and it's been 2 seconds since the last press
-        if not self.active_keys and elapsed > KeyRecordingPage.KEYSTROKE_TIMEOUT_MS:
+        if (
+            not self.active_keys
+            and not self.joystick_active()
+            and elapsed > KeyRecordingPage.KEYSTROKE_TIMEOUT_MS
+        ):
             if self.key_list:
                 self.key_list.remove_trailing_idles()
                 print(
@@ -148,10 +187,76 @@ class KeyRecordingPage(QWidget):
                 )
                 self.add_keyset_entry(self.key_list)
                 self.key_list.clear()
+            if self.joystick_list:
+                self.joystick_list.remove_trailing_idles()
+                print(
+                    f"Produced recording of {len(self.joystick_list)} gamepad entries: {self.joystick_list}"
+                )
+                self.add_gamepad_entry(self.joystick_list)
+                self.joystick_list.clear()
             return
 
         new_stroke = DOOMKeystroke.from_qt_keys(self.active_keys)
         self.key_list.append(new_stroke)
+
+    def poll_sdl_events(self):
+        event = sdl3.SDL_Event()
+        while sdl3.SDL_PollEvent(ctypes.byref(event)):  # type: ignore
+            if event.type == sdl3.SDL_EVENT_GAMEPAD_ADDED:
+                if not self.gamepad:
+                    self.gamepad = sdl3.SDL_OpenGamepad(event.gdevice.which)
+                    print(
+                        f"Controller Connected: {sdl3.SDL_GetGamepadName(self.gamepad)}"
+                    )
+
+            elif event.type == sdl3.SDL_EVENT_GAMEPAD_REMOVED:
+                if self.gamepad:
+                    sdl3.SDL_CloseGamepad(self.gamepad)
+                    self.gamepad = None
+                    print("Controller Disconnected")
+
+            elif event.type == sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+                # https://wiki.libsdl.org/SDL3/SDL_GamepadButtonEvent
+                self.handle_gamepad_button(event.gbutton.button, True)
+
+            elif event.type == sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP:
+                self.handle_gamepad_button(event.gbutton.button, False)
+
+            elif event.type == sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
+                # https://wiki.libsdl.org/SDL3/SDL_GamepadAxisEvent
+                self.handle_gamepad_axis(event.gaxis.axis, event.gaxis.value)
+
+    def handle_gamepad_button(self, button_id, pressed: bool):
+        if button_id not in SDL_BUTTONS_TO_BUTTON_CODES:
+            return
+
+        if pressed:
+            self.active_joystick_keys |= SDL_BUTTONS_TO_BUTTON_CODES[button_id]
+        else:
+            self.active_joystick_keys &= ~SDL_BUTTONS_TO_BUTTON_CODES[button_id]
+        self.last_key_update = perf_counter_ms()
+
+    def handle_gamepad_axis(self, axis, value: int):
+        DEADZONE = 8000
+
+        if axis == sdl3.SDL_GAMEPAD_AXIS_LEFTX:
+            self.last_key_update = perf_counter_ms()
+            if abs(value) >= DEADZONE:
+                self.joystick_x = value
+            else:
+                self.joystick_x = 0
+        elif axis == sdl3.SDL_GAMEPAD_AXIS_LEFTY:
+            self.last_key_update = perf_counter_ms()
+            if abs(value) >= DEADZONE:
+                self.joystick_y = value
+            else:
+                self.joystick_y = 0
+        elif axis in SDL_AXES_TO_BUTTON_CODES:
+            self.last_key_update = perf_counter_ms()
+            if abs(value) >= DEADZONE * 2:
+                self.active_joystick_keys |= SDL_AXES_TO_BUTTON_CODES[axis]
+            else:
+                self.active_joystick_keys &= ~SDL_AXES_TO_BUTTON_CODES[axis]
 
     def add_keyset_entry(self, key_list: DOOMKeystrokeList) -> None:
         duration = len(key_list) * 1000 // 30
@@ -190,6 +295,17 @@ class KeyRecordingPage(QWidget):
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
             item.setFont(BODY_FONT)
             head.appendRow(item)
+
+        self.tree_model.appendRow(head)
+
+    def add_gamepad_entry(self, key_list: DOOMGamepadTickList) -> None:
+        duration = len(key_list) * 1000 // 30
+        (duration_s, duration) = (duration // 1000, duration % 1000)
+
+        head = QtGui.QStandardItem(
+            f"Gamepad ({duration_s}.{duration}s; {key_list.size_in_bytes} bytes)"
+        )
+        head.setFont(BODY_FONT)
 
         self.tree_model.appendRow(head)
 
@@ -256,7 +372,6 @@ class RecordingIndicator(QWidget):
                 border: none;
             }
             QProgressBar::chunk {
-                width: 1px;
                 background-color: #991b1b;
             }
         """)
