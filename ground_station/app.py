@@ -5,6 +5,7 @@ import time
 from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
 from messages import DOOMKeystroke, DOOMKeystrokeList
 
+
 # import sdl3
 from PyQt6 import QtGui
 from PyQt6.QtCore import Qt, QTimer
@@ -23,8 +24,12 @@ from PyQt6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
     QWidget,
+    QGraphicsScene,
+    QGraphicsView,
+    QGraphicsPixmapItem
+    
 )
-
+import numpy as np
 
 def perf_counter_ms() -> int:
     return time.perf_counter_ns() // 1_000_000
@@ -50,10 +55,105 @@ class MainWindow(QMainWindow):
 
         tabs = QTabWidget()
         tabs.addTab(KeyRecordingPage(), "Keystrokes")
-        tabs.addTab(QWidget(), "DOOM Viewer")
+        tabs.addTab(VideoFeedPage(), "DOOM Viewer")
         tabs.addTab(QWidget(), "Satellite Status")
 
         self.setCentralWidget(tabs)
+
+class VideoFeedPage(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        title = QLabel("Live DOOM Feed")
+        title.setFont(HEADING_FONT)
+
+        #raw image data and parameters
+        self.raw_data = b''
+        self.height = 200
+        self.width = 320
+        self.colormap_list = self.colormap_from_hex("./assets/pallet0.hex")
+
+        #Create QgraphicsView and Scene to hold the video feed
+        self.view = QGraphicsView()
+        self.scene = QGraphicsScene(self)
+        self.view.setScene(self.scene)
+        self.view.setMinimumSize(self.width, self.height)
+
+        #Create a persistent pixmap_item item to hold image frame and scale to match CRT aspect ratio (20% taller than width)
+        self.pixmap_item = QGraphicsPixmapItem()
+        transform = QtGui.QTransform()
+        transform.scale(1.0, 1.2) #scale up y pixels by 20% to match original CRT aspect ratio
+        self.pixmap_item.setTransform(transform)
+        self.view.fitInView(self.view.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self.scene.addItem(self.pixmap_item)
+        
+        #Add a button to generate random data for testing
+        self.btn_refresh = QPushButton("Generate New Raw Data")
+        self.btn_refresh.clicked.connect(self.update_with_random_data)
+
+        #add to layout
+        layout = QVBoxLayout()
+        layout.addWidget(title)
+        layout.addWidget(self.view)
+        layout.addWidget(self.btn_refresh)
+        self.setLayout(layout)
+
+    def update_with_random_data(self):
+        # Generate dummy 320x200 L8 RGB data
+        self.raw_data = np.random.randint(0, 255, (self.height, self.width), dtype=np.uint8).flatten().tobytes()
+        self.update_image()
+    
+    def update_image(self):
+        # Convert Raw Data -> QImage -> QPixmap
+        q_img = QtGui.QImage(self.raw_data, self.width, self.height, self.width*1, QtGui.QImage.Format.Format_Indexed8)
+        # Set a color table for the indexed image
+        q_img.setColorTable(self.colormap_list)
+
+        # Display via Pixmap Item
+        pixmap = QtGui.QPixmap.fromImage(q_img)
+        self.pixmap_item.setPixmap(pixmap)
+
+        #fit to view 
+        self.view.fitInView(self.view.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    
+    def colormap_from_hex(self, filename: str) -> list[QtGui.QRgb]:
+        """
+        Create a QList of QRgb colors from a list of hex color strings.
+
+        Args:
+            hex_file: List of hex color strings, one per line, in the format "RRGGBB" (e.g., "FF0000" for red).
+
+        Returns:
+            list[QRgb]: A Qt color list ready for use in palettes or colormaps.
+
+        Example:
+            >>> colors = colormap_from_hex("my_colors.hex")
+        
+        """
+        qrgb_list: list[QtGui.QRgb] = []
+        
+        try:
+            with open(filename, 'rb') as f:
+                hex_values = [line.rstrip() for line in f.readlines()]
+        except FileNotFoundError:
+            # Return an empty list if the file doesn't exist
+            return qrgb_list
+
+        for hex_str in hex_values:
+            # Parse hex to integer
+            rgb_int = int(hex_str, 16)
+            qrgb = QtGui.qRgb((rgb_int >> 16) & 0xFF, (rgb_int >> 8) & 0xFF, rgb_int & 0xFF)
+            qrgb_list.append(qrgb)
+        
+        return qrgb_list
+
+    #NOTES -M.R.O.
+    ## Each pallet will be its down hex file
+    ## want to create a dict of pallets , where each value is a qlist of QRgb colors
+    ## Make a ColorPallet<dict>
+    ## methods to load file from hex and convert to list of QRgb colors
+    ## has default return pallet if file not found 
 
 
 class KeyRecordingPage(QWidget):
