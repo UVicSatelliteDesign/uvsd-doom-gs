@@ -68,7 +68,7 @@ class VideoFeedPage(QWidget):
         title.setFont(HEADING_FONT)
 
         #raw image data and parameters
-        self.raw_data = b''
+        self._raw_data_buffer_buffer = b''
         self.height = 200
         self.width = 320
         self.colormap_list = self.colormap_from_hex("./assets/pallet0.hex")
@@ -86,26 +86,54 @@ class VideoFeedPage(QWidget):
         self.pixmap_item.setTransform(transform)
         self.view.fitInView(self.view.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.scene.addItem(self.pixmap_item)
-        
-        #Add a button to generate random data for testing
-        self.btn_refresh = QPushButton("Generate New Raw Data")
-        self.btn_refresh.clicked.connect(self.update_with_random_data)
+
+    # ------- FOR SIMULATING VIDEO DATA STREAM ---------
+        # Setup Timer for streaming 
+        self.stream_timer = QTimer()
+        self.stream_timer.setInterval(1000 // 35)  # ~28ms for 35 FPS
+        self.stream_timer.timeout.connect(self.update_with_random_data)
+
+        #button to toggle stream for testing:
+        self.btn_toggle_stream = QPushButton("Start Simulated Stream")
+        self.btn_toggle_stream.setCheckable(True)
+        self.btn_toggle_stream.clicked.connect(self.toggle_stream)
+    # ------- ------- ------- ------- ------- ---------
 
         #add to layout
         layout = QVBoxLayout()
         layout.addWidget(title)
         layout.addWidget(self.view)
-        layout.addWidget(self.btn_refresh)
+        layout.addWidget(self.btn_toggle_stream)
         self.setLayout(layout)
+
+    @property
+    def raw_data_buffer(self):
+        return self._raw_data_buffer_buffer
+
+    @raw_data_buffer.setter
+    def raw_data_buffer(self, value):
+        self._raw_data_buffer_buffer = value
+        self.update_image()
+
+    # ------- FOR SIMULATING VIDEO DATA STREAM ---------
+    def toggle_stream(self):
+        if self.btn_toggle_stream.isChecked():
+            self.stream_timer.start()
+            self.btn_toggle_stream.setText("Stop Simulated  Stream")
+        else:
+            self.stream_timer.stop()
+            self.btn_toggle_stream.setText("Start Simulated  Stream")
 
     def update_with_random_data(self):
         # Generate dummy 320x200 L8 RGB data
-        self.raw_data = np.random.randint(0, 255, (self.height, self.width), dtype=np.uint8).flatten().tobytes()
+        self.raw_data_buffer = np.random.randint(0, 255, (self.height, self.width), dtype=np.uint8).flatten().tobytes()
         self.update_image()
-    
+    # ------- ------- ------- ------- ------- ---------
+
+
     def update_image(self):
         # Convert Raw Data -> QImage -> QPixmap
-        q_img = QtGui.QImage(self.raw_data, self.width, self.height, self.width*1, QtGui.QImage.Format.Format_Indexed8)
+        q_img = QtGui.QImage(self.raw_data_buffer, self.width, self.height, self.width*1, QtGui.QImage.Format.Format_Indexed8)
         # Set a color table for the indexed image
         q_img.setColorTable(self.colormap_list)
 
@@ -148,12 +176,10 @@ class VideoFeedPage(QWidget):
         
         return qrgb_list
 
-    #NOTES -M.R.O.
+    #NOTES for pallet changes -M.R.O.
     ## Each pallet will be its down hex file
     ## want to create a dict of pallets , where each value is a qlist of QRgb colors
-    ## Make a ColorPallet<dict>
-    ## methods to load file from hex and convert to list of QRgb colors
-    ## has default return pallet if file not found 
+
 
 
 class KeyRecordingPage(QWidget):
