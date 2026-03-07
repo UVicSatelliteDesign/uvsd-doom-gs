@@ -4,7 +4,7 @@ import time
 
 from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
 from messages import DOOMKeystroke, DOOMKeystrokeList
-
+from pathlib import Path
 
 # import sdl3
 from PyQt6 import QtGui
@@ -68,10 +68,12 @@ class VideoFeedPage(QWidget):
         title.setFont(HEADING_FONT)
 
         #raw image data and parameters
-        self._raw_data_buffer_buffer = b''
+        self._raw_data_buffer_buffer = b''      #Accessed via 'raw_data_buffer' - holds 320x200 byte paletted video stream
+        self.palette_selected = 1              #some int 0-13 to determin colour palette used -> from data stream
         self.height = 200
         self.width = 320
-        self.colormap_list = self.colormap_from_hex("./assets/pallet0.hex")
+        v_scale = 1.2                           #scale used to match CRT aspect ratio
+        self.palette_dict = self.colormap_from_hex("./assets/palettes.hex")
 
         #Create QgraphicsView and Scene to hold the video feed
         self.view = QGraphicsView()
@@ -82,7 +84,7 @@ class VideoFeedPage(QWidget):
         #Create a persistent pixmap_item item to hold image frame and scale to match CRT aspect ratio (20% taller than width)
         self.pixmap_item = QGraphicsPixmapItem()
         transform = QtGui.QTransform()
-        transform.scale(1.0, 1.2) #scale up y pixels by 20% to match original CRT aspect ratio
+        transform.scale(1.0, v_scale) #scale up y pixels by 20% to match original CRT aspect ratio
         self.pixmap_item.setTransform(transform)
         self.view.fitInView(self.view.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.scene.addItem(self.pixmap_item)
@@ -135,7 +137,7 @@ class VideoFeedPage(QWidget):
         # Convert Raw Data -> QImage -> QPixmap
         q_img = QtGui.QImage(self.raw_data_buffer, self.width, self.height, self.width*1, QtGui.QImage.Format.Format_Indexed8)
         # Set a color table for the indexed image
-        q_img.setColorTable(self.colormap_list)
+        q_img.setColorTable(self.palette_dict.get(self.palette_selected, []))
 
         # Display via Pixmap Item
         pixmap = QtGui.QPixmap.fromImage(q_img)
@@ -145,36 +147,48 @@ class VideoFeedPage(QWidget):
         self.view.fitInView(self.view.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     
-    def colormap_from_hex(self, filename: str) -> list[QtGui.QRgb]:
+    def colormap_from_hex(self, filename: str) -> dict[int : list[QtGui.QRgb]]:
         """
-        Create a QList of QRgb colors from a list of hex color strings.
+        Create a Dict of Lists of QRgb colors from a list of hex color strings.
 
         Args:
             hex_file: List of hex color strings, one per line, in the format "RRGGBB" (e.g., "FF0000" for red).
 
         Returns:
-            list[QRgb]: A Qt color list ready for use in palettes or colormaps.
+            dict[int:QRgb]: int (0-13), and 256 color QT color list A Qt color list ready for use in palettes or colormaps.
 
         Example:
             >>> colors = colormap_from_hex("my_colors.hex")
         
         """
-        qrgb_list: list[QtGui.QRgb] = []
+        palette_dict = {}
+        #qrgb_list: list[QtGui.QRgb] = []
         
         try:
             with open(filename, 'rb') as f:
                 hex_values = [line.rstrip() for line in f.readlines()]
+                key = 0 
+                start = 0
+                end = 256 * (key+1)
+                while(end<=len(hex_values)):
+                    palette_values = hex_values[start:end]
+                    qrgb_list: list[QtGui.QRgb] = []
+                    for hex_str in palette_values:
+                        # Parse hex to integer
+                        rgb_int = int(hex_str, 16)
+                        qrgb = QtGui.qRgb((rgb_int >> 16) & 0xFF, (rgb_int >> 8) & 0xFF, rgb_int & 0xFF)
+                        qrgb_list.append(qrgb)
+                    palette_dict[key] = qrgb_list
+                    #increment through list of hex values 
+                    key +=1
+                    start = end
+                    end = 256 *(key+1)
+
         except FileNotFoundError:
             # Return an empty list if the file doesn't exist
-            return qrgb_list
-
-        for hex_str in hex_values:
-            # Parse hex to integer
-            rgb_int = int(hex_str, 16)
-            qrgb = QtGui.qRgb((rgb_int >> 16) & 0xFF, (rgb_int >> 8) & 0xFF, rgb_int & 0xFF)
-            qrgb_list.append(qrgb)
+            return palette_dict
         
-        return qrgb_list
+        return palette_dict
 
     #NOTES for pallet changes -M.R.O.
     ## Each pallet will be its down hex file
