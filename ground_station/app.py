@@ -64,6 +64,10 @@ class VideoFeedPage(QWidget):
     def __init__(self):
         super().__init__()
 
+        #filepath for palette file
+        script_loc = Path(__file__).resolve()
+        palette_file_path = script_loc.parent.parent / 'assets' / 'palettes.hex'
+
         title = QLabel("Live DOOM Feed")
         title.setFont(HEADING_FONT)
 
@@ -73,7 +77,7 @@ class VideoFeedPage(QWidget):
         self.height = 200
         self.width = 320
         v_scale = 1.2                           #scale used to match CRT aspect ratio
-        self.palette_dict = self.colormap_from_hex("./assets/palettes.hex")
+        self.palette_dict = self.colormap_from_hex(palette_file_path)
 
         #Create QgraphicsView and Scene to hold the video feed
         self.view = QGraphicsView()
