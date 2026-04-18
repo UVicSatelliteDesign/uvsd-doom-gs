@@ -7,8 +7,10 @@ from messages import DOOMKeystroke, DOOMKeystrokeList
 from pathlib import Path
 
 # import sdl3
+from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
 from PyQt6 import QtGui
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QByteArray
+from PySide6.QtCore import QIODevice
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -26,7 +28,9 @@ from PyQt6.QtWidgets import (
     QWidget,
     QGraphicsScene,
     QGraphicsView,
-    QGraphicsPixmapItem
+    QGraphicsPixmapItem,
+    QComboBox,
+    QTextEdit
     
 )
 import numpy as np
@@ -71,6 +75,16 @@ class VideoFeedPage(QWidget):
         title = QLabel("Live DOOM Feed")
         title.setFont(HEADING_FONT)
 
+        # Serial port
+        self.port_menu = QComboBox()
+        self.serial_port = QSerialPort()
+        self.serial_port.readyRead.connect(self.serial_read)
+        self.connect_btn = QPushButton("Connect Serial")
+        self.connect_btn.clicked.connect(self.toggle_connection)
+        self.serial_data_box = QTextEdit()
+        self.refresh_ports()
+        
+
         #raw image data and parameters
         self._raw_data_buffer_buffer = b''      #Accessed via 'raw_data_buffer' - holds 320x200 byte paletted video stream
         self.palette_selected = 1              #some int 0-13 to determin colour palette used -> from data stream
@@ -110,6 +124,9 @@ class VideoFeedPage(QWidget):
         layout.addWidget(title)
         layout.addWidget(self.view)
         layout.addWidget(self.btn_toggle_stream)
+        layout.addWidget(self.port_menu)
+        layout.addWidget(self.connect_btn)
+        layout.addWidget(self.serial_data_box)
         self.setLayout(layout)
 
     @property
@@ -120,6 +137,49 @@ class VideoFeedPage(QWidget):
     def raw_data_buffer(self, value):
         self._raw_data_buffer_buffer = value
         self.update_image()
+
+    #SERIAL PORT STUFF ----------------------------
+    def refresh_ports(self):
+        # Clear old items before refreshing
+        self.port_menu.clear() 
+        
+        # Get list of ports and add their names to the drop-down
+        ports = QSerialPortInfo.availablePorts()
+        for port in ports:
+            # You can also use port.description() for a friendlier name
+            self.port_menu.addItem(port.portName())
+
+    def serial_read(self):
+        # 3. Read all data currently in the buffer
+        raw_data = self.serial_port.readAll()
+        
+        # 4. Convert bytes to string (handling potential decode errors)
+        try:
+            text = raw_data.data().decode('utf-8')
+        except UnicodeDecodeError:
+            # Fallback to local encoding if UTF-8 fails
+            text = raw_data.data().decode('latin-1')
+
+        # 5. Append text to the text box
+        data_length = str(raw_data.size())
+        self.serial_data_box.setPlainText(data_length)
+        self.raw_data_buffer = raw_data
+        self.update_image()
+        
+    def toggle_connection(self):
+        if not self.serial_port.isOpen():
+            self.connect_btn.setText("Trying to connect")
+            self.serial_port.setPortName(self.port_menu.currentText())
+            self.serial_port.setBaudRate(2000000) # Default 9600
+            
+            if self.serial_port.open(QIODevice.ReadOnly):
+                #self.log.append(f"Connected to {self.serial.portName()}")
+                self.connect_btn.setText("Connected")
+                pass
+        else:
+            self.serial_port.close()
+            #self.log.append("Disconnected")
+            self.connect_btn.setText("Disconnect")
 
     # ------- FOR SIMULATING VIDEO DATA STREAM ---------
     def toggle_stream(self):
