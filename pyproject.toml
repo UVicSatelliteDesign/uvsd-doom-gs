@@ -5,6 +5,29 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "numpy>=2.5.3",
     "pyqt6>=6.10.2",
     "pysdl3>=0.9.10b0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+# pyflakes + basic pycodestyle errors, import sorting, and pyupgrade
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+# app.py imports the sibling modules as top-level `hid` / `messages`
+known-first-party = ["hid", "messages"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The modules import each other as top-level names, so put the package dir on sys.path
+pythonpath = ["ground_station"]

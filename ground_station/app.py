@@ -1,10 +1,9 @@
 import signal
 import sys
 import time
-
-from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
-from messages import DOOMKeystroke, DOOMKeystrokeList
 from pathlib import Path
+
+import numpy as np
 
 # import sdl3
 from PyQt6 import QtGui
@@ -13,6 +12,9 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QFrame,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -24,12 +26,11 @@ from PyQt6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
     QWidget,
-    QGraphicsScene,
-    QGraphicsView,
-    QGraphicsPixmapItem
-    
 )
-import numpy as np
+
+from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
+from messages import DOOMKeystroke, DOOMKeystrokeList
+
 
 def perf_counter_ms() -> int:
     return time.perf_counter_ns() // 1_000_000

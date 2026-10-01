@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import struct
-from collections.abc import MutableSequence
-from typing import Iterable, overload
+from collections.abc import Iterable, MutableSequence
+from typing import overload
 
 from PyQt6.QtCore import Qt
 
