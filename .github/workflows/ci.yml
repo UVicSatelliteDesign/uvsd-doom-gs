@@ -1,4 +1,5 @@
-# Ground station CI: lint with ruff and run the pytest suite on every push/PR.
+# Ground station CI: lint with ruff, type-check with mypy and run the pytest
+# suite on every push/PR.
 # The Qt UI (app.py) isn't exercised yet; tests cover the uplink packet format
 # in messages.py and only need QtCore, so no display is required.
 
@@ -24,6 +25,20 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: ruff check
         run: uv run --frozen ruff check --output-format github .
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      # PyQt6 ships its own stubs, so mypy needs the real deps installed
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: mypy
+        run: uv run --frozen mypy
 
   test:
     name: Tests (pytest)

@@ -8,5 +8,6 @@ Requires [uv](https://docs.astral.sh/uv/). CI runs the same two commands on ever
 
 ```bash
 uv run ruff check .     # lint (add --fix to apply safe fixes)
+uv run mypy             # type check (config in pyproject.toml)
 uv run pytest           # tests in tests/, no display needed
 ```

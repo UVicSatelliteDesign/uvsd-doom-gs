@@ -152,7 +152,7 @@ class VideoFeedPage(QWidget):
         self.view.fitInView(self.view.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     
-    def colormap_from_hex(self, filename: str) -> dict[int : list[QtGui.QRgb]]:
+    def colormap_from_hex(self, filename: str) -> dict[int, list[int]]:
         """
         Create a Dict of Lists of QRgb colors from a list of hex color strings.
 
@@ -177,7 +177,7 @@ class VideoFeedPage(QWidget):
                 end = 256 * (key+1)
                 while(end<=len(hex_values)):
                     palette_values = hex_values[start:end]
-                    qrgb_list: list[QtGui.QRgb] = []
+                    qrgb_list: list[int] = []  # QRgb is a plain int in PyQt6
                     for hex_str in palette_values:
                         # Parse hex to integer
                         rgb_int = int(hex_str, 16)
@@ -330,8 +330,8 @@ class KeyRecordingPage(QWidget):
                 label.append(HID_TO_DESCRIPTION[key])
             labels.append("-".join(label))
 
-        for label in labels:
-            item = QtGui.QStandardItem(label)
+        for text in labels:
+            item = QtGui.QStandardItem(text)
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
             item.setFont(BODY_FONT)
             head.appendRow(item)

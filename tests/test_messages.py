@@ -6,6 +6,12 @@ Wire format under test (see the docstrings in messages.py):
   - DOOMKeystroke      -> 4 bytes: [modifier bitmask][key 1][key 2][key 3]
   - DOOMKeystrokeList  -> 1 count byte N, then N * 4 keystroke bytes (N <= 255)
 
+The Spacecraft Command Format spec ("DOOM Command Body: Keyboard", 0x02) is
+stricter: an ORCA-forwarded body is at most 245 bytes, so a packet holds at
+most 60 keystrokes (2.0 s), behind a batch # / sequence # / sequence count /
+size header. messages.py doesn't do that yet; the xfail(strict) tests below
+pin the spec limit and will start failing (XPASS) once it is implemented.
+
 Only QtCore is used (for Qt.Key constants), so these run headless with no
 display or QApplication.
 """
@@ -130,7 +136,8 @@ def test_remove_trailing_idles_on_all_idle_list_empties_it():
     assert len(ks_list) == 0
 
 
-def test_255_keystrokes_is_the_largest_serialisable_packet():
+def test_count_byte_caps_the_current_format_at_255():
+    """Current code only; the spec limit is 60 (see the xfail tests below)."""
     assert bytes(DOOMKeystrokeList([key(0x04)] * 255))[0] == 255
     with pytest.raises(ValueError):
         bytes(DOOMKeystrokeList([key(0x04)] * 256))
@@ -145,3 +152,20 @@ def test_split_to_serialise_chunks_at_255(count, chunks):
     for p in parts:
         bytes(p)  # must not raise
     assert [k.keys for p in parts for k in p] == [k.keys for k in original]
+
+
+# ── Spacecraft Command Format spec (not implemented yet) ────────────────────
+
+SPEC_MAX_KEYSTROKES = 60  # 245-byte ORCA body: 1 cmd + 4 header + 60 * 4
+
+
+@pytest.mark.xfail(strict=True, reason="spec caps a keyboard packet at 60 entries; code allows 255")
+def test_spec_more_than_60_keystrokes_is_rejected():
+    with pytest.raises(ValueError):
+        bytes(DOOMKeystrokeList([key(0x04)] * (SPEC_MAX_KEYSTROKES + 1)))
+
+
+@pytest.mark.xfail(strict=True, reason="spec caps a keyboard packet at 60 entries; code splits at 255")
+def test_spec_split_to_serialise_chunks_at_60():
+    parts = DOOMKeystrokeList([key(0x04)] * 150).split_to_serialise()
+    assert [len(p) for p in parts] == [60, 60, 30]

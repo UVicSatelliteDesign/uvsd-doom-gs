@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.0",
     "pytest>=9.1.1",
     "ruff>=0.16.10",
 ]
@@ -26,6 +27,13 @@ select = ["E4", "E7", "E9", "F", "I", "UP"]
 [tool.ruff.lint.isort]
 # app.py imports the sibling modules as top-level `hid` / `messages`
 known-first-party = ["hid", "messages"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["ground_station", "tests"]
+# Same flat-import layout as pytest's pythonpath below
+mypy_path = "ground_station"
+explicit_package_bases = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
