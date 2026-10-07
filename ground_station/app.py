@@ -177,13 +177,15 @@ class VideoFeedPage(QWidget):
                 end = 256 * (key+1)
                 while(end<=len(hex_values)):
                     palette_values = hex_values[start:end]
-                    qrgb_list: list[int] = []  # QRgb is a plain int in PyQt6
+                    # PyQt6 has no QRgb type: each colour is a plain int packed as
+                    # 0xAARRGGBB (qRgb() sets alpha to 0xFF), as setColorTable() expects
+                    argb_colors: list[int] = []
                     for hex_str in palette_values:
                         # Parse hex to integer
                         rgb_int = int(hex_str, 16)
                         qrgb = QtGui.qRgb((rgb_int >> 16) & 0xFF, (rgb_int >> 8) & 0xFF, rgb_int & 0xFF)
-                        qrgb_list.append(qrgb)
-                    palette_dict[key] = qrgb_list
+                        argb_colors.append(qrgb)
+                    palette_dict[key] = argb_colors
                     #increment through list of hex values 
                     key +=1
                     start = end
