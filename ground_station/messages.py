@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import struct
-from collections.abc import MutableSequence
-from typing import Iterable, overload
+from collections.abc import Iterable, MutableSequence
+from typing import overload
 
 from PyQt6.QtCore import Qt
 
@@ -89,9 +89,9 @@ class DOOMKeystroke:
                 key_entries.append(hid_key)
 
         # Pad with zeros and slice to ensure exactly 3 key slots
-        key_tuple = tuple((key_entries + [0, 0, 0])[:3])
+        k1, k2, k3 = (key_entries + [0, 0, 0])[:3]
 
-        return cls(modifiers, key_tuple)
+        return cls(modifiers, (k1, k2, k3))
 
 
 class DOOMKeystrokeList(MutableSequence[DOOMKeystroke]):
