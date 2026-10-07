@@ -166,10 +166,10 @@ HID_TO_DESCRIPTION = {
     0x45: "F12",
     0x48: "Pause",
     # Arrow Keys
-    0x4F: "\u2190",
-    0x50: "\u2191",
-    0x51: "\u2192",
-    0x52: "\u2193",
+    0x4F: "\u2192",  # Right
+    0x50: "\u2190",  # Left
+    0x51: "\u2193",  # Down
+    0x52: "\u2191",  # Up
 }
 
 HID_MODIFIERS_TO_DESCRIPTION = {
