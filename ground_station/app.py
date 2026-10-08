@@ -4,6 +4,7 @@ import time
 
 from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
 from messages import DOOMKeystroke, DOOMKeystrokeList
+from serial_rx import SerialFrameReader, list_serial_ports
 from pathlib import Path
 
 # import sdl3
@@ -12,6 +13,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -54,11 +56,16 @@ class MainWindow(QMainWindow):
         shortcut.activated.connect(self.close)
 
         tabs = QTabWidget()
+        self.video_feed_page = VideoFeedPage()
         tabs.addTab(KeyRecordingPage(), "Keystrokes")
-        tabs.addTab(VideoFeedPage(), "DOOM Viewer")
+        tabs.addTab(self.video_feed_page, "DOOM Viewer")
         tabs.addTab(QWidget(), "Satellite Status")
 
         self.setCentralWidget(tabs)
+
+    def closeEvent(self, a0):
+        self.video_feed_page.shutdown()
+        return super().closeEvent(a0)
 
 class VideoFeedPage(QWidget):
     def __init__(self):
@@ -105,10 +112,29 @@ class VideoFeedPage(QWidget):
         self.btn_toggle_stream.clicked.connect(self.toggle_stream)
     # ------- ------- ------- ------- ------- ---------
 
+    # ------- LIVE SERIAL FRAME STREAM ---------
+        self.serial_reader = None      #SerialFrameReader while connected, else None
+
+        self.combo_serial_port = QComboBox()
+        self.refresh_serial_ports()
+
+        self.btn_serial_connect = QPushButton("Connect")
+        self.btn_serial_connect.setCheckable(True)
+        self.btn_serial_connect.clicked.connect(self.toggle_serial)
+
+        self.lbl_serial_status = QLabel("Disconnected")
+
+        serial_row = QHBoxLayout()
+        serial_row.addWidget(self.combo_serial_port)
+        serial_row.addWidget(self.btn_serial_connect)
+        serial_row.addWidget(self.lbl_serial_status)
+    # ------- ------- ------- ------- ------- ---------
+
         #add to layout
         layout = QVBoxLayout()
         layout.addWidget(title)
         layout.addWidget(self.view)
+        layout.addLayout(serial_row)
         layout.addWidget(self.btn_toggle_stream)
         self.setLayout(layout)
 
@@ -126,14 +152,66 @@ class VideoFeedPage(QWidget):
         if self.btn_toggle_stream.isChecked():
             self.stream_timer.start()
             self.btn_toggle_stream.setText("Stop Simulated  Stream")
+            self.btn_serial_connect.setEnabled(False)
         else:
             self.stream_timer.stop()
             self.btn_toggle_stream.setText("Start Simulated  Stream")
+            self.btn_serial_connect.setEnabled(True)
 
     def update_with_random_data(self):
         # Generate dummy 320x200 L8 RGB data
         self.raw_data_buffer = np.random.randint(0, 255, (self.height, self.width), dtype=np.uint8).flatten().tobytes()
         self.update_image()
+    # ------- ------- ------- ------- ------- ---------
+
+    # ------- LIVE SERIAL FRAME STREAM ---------
+    def refresh_serial_ports(self):
+        self.combo_serial_port.clear()
+        self.combo_serial_port.addItems(list_serial_ports())
+
+    def toggle_serial(self):
+        if self.btn_serial_connect.isChecked():
+            port = self.combo_serial_port.currentText()
+            if not port:
+                self.lbl_serial_status.setText("No serial ports found")
+                self.btn_serial_connect.setChecked(False)
+                return
+
+            self.serial_reader = SerialFrameReader(port)
+            self.serial_reader.frame_received.connect(self.on_frame_received)
+            self.serial_reader.error_occurred.connect(self.on_serial_error)
+            self.serial_reader.start()
+
+            self.btn_serial_connect.setText("Disconnect")
+            self.lbl_serial_status.setText(f"Connected to {port}")
+            self.combo_serial_port.setEnabled(False)
+            self.btn_toggle_stream.setEnabled(False)
+        else:
+            self.stop_serial()
+            self.lbl_serial_status.setText("Disconnected")
+
+    def stop_serial(self):
+        if self.serial_reader is not None:
+            self.serial_reader.frame_received.disconnect(self.on_frame_received)
+            self.serial_reader.error_occurred.disconnect(self.on_serial_error)
+            self.serial_reader.stop()
+            self.serial_reader = None
+
+        self.btn_serial_connect.setText("Connect")
+        self.btn_serial_connect.setChecked(False)
+        self.combo_serial_port.setEnabled(True)
+        self.btn_toggle_stream.setEnabled(True)
+
+    def on_frame_received(self, playpal_index, pixels):
+        self.palette_selected = playpal_index
+        self.raw_data_buffer = pixels
+
+    def on_serial_error(self, message):
+        self.lbl_serial_status.setText(f"Serial error: {message}")
+        self.stop_serial()
+
+    def shutdown(self):
+        self.stop_serial()
     # ------- ------- ------- ------- ------- ---------
 
 
