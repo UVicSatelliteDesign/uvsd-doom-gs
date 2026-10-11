@@ -1,8 +1,8 @@
 """
 Telemetry downlinked from the DOOM balloon, as logged to telemetry_data.csv.
 
-This module has no Qt dependency, so the telemetry page, the test-data
-generator and the tests can all share it.
+This module has no Qt dependency, so the telemetry page, the tests and a
+local test-data generator (not part of this repo) can all share it.
 """
 
 import csv
@@ -26,32 +26,34 @@ class Field:
         unit: Unit of the value *as stored in the CSV*.
         group: Name of the plot the field is drawn on. Fields sharing a group
             share an axes, so they must share a unit.
+        short: Name within its plot's legend, when the plot has several fields.
     """
 
     key: str
     label: str
     unit: str
     group: str
+    short: str = ""
 
 
-# The schema from the work package, in its column order. Everything else
-# (parsing, the generator, the plots) is driven from this table.
+# The schema from the work package, in its column order. Parsing, the plots
+# and the local test-data generator (not part of this repo) all use this table.
 FIELDS: tuple[Field, ...] = (
     Field("ts", "Timestamp", "s", "time"),
     Field("battery_voltage", "Battery voltage", "V", "battery_voltage"),
     Field("battery_current", "Battery current", "A", "battery_current"),
-    Field("battery_temp", "Battery temperature", "°C", "temperature"),
+    Field("battery_temp", "Battery temperature", "°C", "temperature", "Battery"),
     Field("battery_charge", "Battery charge", "%", "battery_charge"),
-    Field("obc_temp", "OBC temperature", "°C", "temperature"),
-    Field("ttc_temp", "TTC temperature", "°C", "temperature"),
-    Field("bms_temp", "BMS temperature", "°C", "temperature"),
+    Field("obc_temp", "OBC temperature", "°C", "temperature", "OBC"),
+    Field("ttc_temp", "TTC temperature", "°C", "temperature", "TTC"),
+    Field("bms_temp", "BMS temperature", "°C", "temperature", "BMS"),
     # Gyroscope and accelerometer units aren't specified yet.
-    Field("gyroscope_x", "Gyroscope X", "", "gyroscope"),
-    Field("gyroscope_y", "Gyroscope Y", "", "gyroscope"),
-    Field("gyroscope_z", "Gyroscope Z", "", "gyroscope"),
-    Field("accelerometer_x", "Accelerometer X", "", "accelerometer"),
-    Field("accelerometer_y", "Accelerometer Y", "", "accelerometer"),
-    Field("accelerometer_z", "Accelerometer Z", "", "accelerometer"),
+    Field("gyroscope_x", "Gyroscope X", "", "gyroscope", "X"),
+    Field("gyroscope_y", "Gyroscope Y", "", "gyroscope", "Y"),
+    Field("gyroscope_z", "Gyroscope Z", "", "gyroscope", "Z"),
+    Field("accelerometer_x", "Accelerometer X", "", "accelerometer", "X"),
+    Field("accelerometer_y", "Accelerometer Y", "", "accelerometer", "Y"),
+    Field("accelerometer_z", "Accelerometer Z", "", "accelerometer", "Z"),
     Field("altitude", "Altitude", "km", "altitude"),
     Field("gps_ts", "GPS time", "hhmmss.sss", "gps_time"),
     Field("gps_lat", "Latitude", "ddmm.mmmm", "latitude"),
@@ -62,6 +64,26 @@ FIELDS: tuple[Field, ...] = (
 
 COLUMNS: tuple[str, ...] = tuple(field.key for field in FIELDS)
 FIELDS_BY_KEY: dict[str, Field] = {field.key: field for field in FIELDS}
+
+# The plots on the telemetry page, top to bottom, as (group, title). Each plot
+# draws every field in its group. The "time" group is the x-axis and "gps_time"
+# is shown as text, so neither is plotted.
+PLOTS: tuple[tuple[str, str], ...] = (
+    ("altitude", "Altitude"),
+    ("temperature", "Temperatures"),
+    ("battery_voltage", "Battery voltage"),
+    ("battery_current", "Battery current"),
+    ("battery_charge", "Battery charge"),
+    ("gyroscope", "Gyroscope"),
+    ("accelerometer", "Accelerometer"),
+    ("groundspeed", "GPS ground speed"),
+    ("course", "GPS course"),
+    ("latitude", "Latitude"),
+    ("longitude", "Longitude"),
+)
+
+# Columns stored in NMEA [d]ddmm.mmmm form but displayed in decimal degrees
+NMEA_COLUMNS = frozenset({"gps_lat", "gps_long"})
 
 
 def nmea_to_decimal(value):
@@ -117,6 +139,72 @@ def format_gps_time(value: float) -> str:
     minutes, millis = divmod(millis, 60_000)
     seconds, millis = divmod(millis, 1000)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{millis:03d}"
+
+
+def display_unit(key: str) -> str:
+    """The unit a column is displayed in: its CSV unit, except for GPS coordinates."""
+    return "°" if key in NMEA_COLUMNS else FIELDS_BY_KEY[key].unit
+
+
+def display_values(key: str, values: np.ndarray) -> np.ndarray:
+    """Converts a column's CSV values to the form they're displayed in."""
+    return nmea_to_decimal(values) if key in NMEA_COLUMNS else values
+
+
+def format_coordinate(
+    degrees: float, positive: str, negative: str, decimals: int = 4
+) -> str:
+    """Decimal degrees with a hemisphere letter, e.g. "48.4634° N"."""
+    hemisphere = positive if degrees >= 0 else negative
+    return f"{abs(degrees):.{decimals}f}° {hemisphere}"
+
+
+def format_age(seconds: float) -> str:
+    """How long ago something happened, e.g. "42 s ago" or "3 d ago"."""
+    if seconds < 0:
+        return "ahead of this computer's clock"
+    for size, unit in ((86_400, "d"), (3600, "h"), (60, "min"), (1, "s")):
+        if seconds >= size:
+            return f"{int(seconds // size)} {unit} ago"
+    return "just now"
+
+
+def missing_spans(times: np.ndarray, values: np.ndarray) -> list[tuple[float, float]]:
+    """Each gap in the values, from the last time before it to the first time after."""
+    missing = np.concatenate(([False], np.isnan(values), [False]))
+    edges = np.flatnonzero(missing[1:] != missing[:-1])
+    last = len(times) - 1
+    return [
+        (times[max(start - 1, 0)], times[min(end, last)])
+        for start, end in zip(edges[::2], edges[1::2])
+    ]
+
+
+BURST_DROP_KM = 1.0
+LANDING_MARGIN_KM = 0.1
+
+
+def flight_events(times: np.ndarray, altitude: np.ndarray) -> dict[str, float]:
+    """
+    When the balloon burst and landed, as far as the data shows so far.
+
+    Burst is the highest point, once the balloon has dropped BURST_DROP_KM
+    below it. Landing is the first time after that within LANDING_MARGIN_KM of
+    the launch altitude.
+    """
+    known = np.isfinite(altitude)
+    if not known.any():
+        return {}
+    peak = int(np.nanargmax(altitude))
+    launch, latest = altitude[known][0], altitude[known][-1]
+    if latest > altitude[peak] - BURST_DROP_KM:
+        return {}
+
+    events = {"Burst": times[peak]}
+    landed = np.flatnonzero(altitude[peak:] <= launch + LANDING_MARGIN_KM)
+    if len(landed):
+        events["Landing"] = times[peak + landed[0]]
+    return events
 
 
 class TelemetryFormatError(ValueError):

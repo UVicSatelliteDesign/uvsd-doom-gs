@@ -11,10 +11,17 @@ import pytest
 from telemetry import (
     COLUMNS,
     FIELDS,
+    PLOTS,
     TelemetryFormatError,
     TelemetryLog,
+    display_unit,
+    display_values,
+    flight_events,
+    format_age,
+    format_coordinate,
     format_gps_time,
     gps_time_to_seconds,
+    missing_spans,
     nmea_to_decimal,
 )
 
@@ -59,6 +66,34 @@ def test_fields_drawn_on_the_same_plot_share_a_unit():
     assert all(len(units) == 1 for units in units_by_group.values()), units_by_group
 
 
+def test_every_group_is_plotted_once_except_the_time_groups():
+    """A field added to the schema must land on a plot, not silently disappear."""
+    plotted = [group for group, _ in PLOTS]
+    assert len(plotted) == len(set(plotted))
+    assert {field.group for field in FIELDS} - set(plotted) == {"time", "gps_time"}
+
+
+def test_fields_sharing_a_plot_have_distinct_short_names():
+    for group, _ in PLOTS:
+        shorts = [f.short for f in FIELDS if f.group == group]
+        if len(shorts) > 1:
+            assert all(shorts) and len(set(shorts)) == len(shorts), group
+
+
+def test_fields_on_a_plot_share_a_display_unit():
+    for group, _ in PLOTS:
+        units = {display_unit(f.key) for f in FIELDS if f.group == group}
+        assert len(units) == 1, (group, units)
+
+
+def test_only_gps_coordinates_are_converted_for_display():
+    assert display_unit("gps_lat") == display_unit("gps_long") == "°"
+    assert display_values("gps_lat", np.array([4827.8])) == pytest.approx([48.463333])
+    altitude = np.array([1.5, 2.5])
+    assert display_unit("altitude") == "km"
+    assert display_values("altitude", altitude) is altitude
+
+
 # ── Conversions ──────────────────────────────────────────────────────────────
 
 
@@ -99,6 +134,60 @@ def test_gps_time_to_seconds(gps_ts, seconds):
 )
 def test_format_gps_time(gps_ts, text):
     assert format_gps_time(gps_ts) == text
+
+
+# ── Display helpers ──────────────────────────────────────────────────────────
+
+
+def test_format_coordinate_adds_the_hemisphere():
+    assert format_coordinate(48.46340, "N", "S") == "48.4634° N"
+    assert format_coordinate(-123.31167, "E", "W") == "123.3117° W"
+    assert format_coordinate(-0.5, "N", "S", decimals=2) == "0.50° S"
+
+
+@pytest.mark.parametrize(
+    ("seconds", "text"),
+    [
+        (0.4, "just now"),
+        (59.9, "59 s ago"),
+        (60, "1 min ago"),
+        (3599, "59 min ago"),
+        (7200, "2 h ago"),
+        (3 * 86_400 + 5, "3 d ago"),
+        (-5, "ahead of this computer's clock"),
+    ],
+)
+def test_format_age(seconds, text):
+    assert format_age(seconds) == text
+
+
+@pytest.mark.parametrize(
+    ("values", "spans"),
+    [
+        ([1, np.nan, np.nan, 4, 5, np.nan, 7], [(0, 3), (4, 6)]),
+        ([np.nan, 2, 3], [(0, 1)]),
+        ([1, 2, np.nan], [(1, 2)]),
+        ([1, 2, 3], []),
+    ],
+)
+def test_missing_spans_run_from_the_value_before_to_the_value_after(values, spans):
+    times = np.arange(len(values))
+    assert missing_spans(times, np.array(values, dtype=float)) == spans
+
+
+@pytest.mark.parametrize(
+    ("altitude", "events"),
+    [
+        ([0, 10, 20, 30, 20, 10, 0.05, 0], {"Burst": 3, "Landing": 6}),
+        ([0, 10, 5, np.nan], {"Burst": 1}),  # falling, not down yet
+        ([0, 10, 20], {}),  # still rising
+        ([0, 10, 9.5], {}),  # less than 1 km below the peak
+        ([np.nan, np.nan], {}),
+    ],
+)
+def test_flight_events(altitude, events):
+    times = np.arange(len(altitude))
+    assert flight_events(times, np.array(altitude, dtype=float)) == events
 
 
 # ── TelemetryLog ─────────────────────────────────────────────────────────────
