@@ -2,15 +2,11 @@
 Tests for ground_station/messages.py: the keystroke packets the ground station
 sends up to the DOOM payload.
 
-Wire format under test (see the docstrings in messages.py):
+Wire format under test, from the Spacecraft Command Format spec:
   - DOOMKeystroke      -> 4 bytes: [modifier bitmask][key 1][key 2][key 3]
-  - DOOMKeystrokeList  -> 1 count byte N, then N * 4 keystroke bytes (N <= 255)
-
-The Spacecraft Command Format spec ("DOOM Command Body: Keyboard", 0x02) is
-stricter: an ORCA-forwarded body is at most 245 bytes, so a packet holds at
-most 60 keystrokes (2.0 s), behind a batch # / sequence # / sequence count /
-size header. messages.py doesn't do that yet; the xfail(strict) tests below
-pin the spec limit and will start failing (XPASS) once it is implemented.
+  - DOOMKeystrokeList  -> 1 size byte N, then N * 4 keystroke bytes (N <= 60)
+  - to_packets()       -> 0x02 [batch][seq][seq count] + the list bytes, one
+                          per 60 keystrokes, then 0x04 [batch] (EOF)
 
 Only QtCore is used (for Qt.Key constants), so these run headless with no
 display or QApplication.
@@ -21,8 +17,8 @@ import struct
 import pytest
 from PyQt6.QtCore import Qt
 
-from hid import QT_TO_HID, QT_TO_HID_MODIFIERS
-from messages import DOOMKeystroke, DOOMKeystrokeList
+from hid import HID_TO_DESCRIPTION, QT_TO_HID, QT_TO_HID_MODIFIERS
+from messages import MAX_KEYSTROKES_PER_PACKET, DOOMKeystroke, DOOMKeystrokeList
 
 IDLE = DOOMKeystroke(0, (0, 0, 0))
 
@@ -88,6 +84,12 @@ def test_from_qt_keys_empty_is_idle():
     assert DOOMKeystroke.from_qt_keys([]).is_idle()
 
 
+def test_arrow_key_labels_match_their_hid_codes():
+    labels = {name: HID_TO_DESCRIPTION[QT_TO_HID[k]] for name, k in [
+        ("right", Qt.Key.Key_Right), ("left", Qt.Key.Key_Left), ("down", Qt.Key.Key_Down), ("up", Qt.Key.Key_Up)]}
+    assert labels == {"right": "\u2192", "left": "\u2190", "down": "\u2193", "up": "\u2191"}
+
+
 def test_hid_mappings_fit_in_a_byte():
     """Every mapped key code and modifier bit must fit the 1-byte wire fields."""
     assert all(0 < code <= 0xFF for code in QT_TO_HID.values())
@@ -136,15 +138,15 @@ def test_remove_trailing_idles_on_all_idle_list_empties_it():
     assert len(ks_list) == 0
 
 
-def test_count_byte_caps_the_current_format_at_255():
-    """Current code only; the spec limit is 60 (see the xfail tests below)."""
-    assert bytes(DOOMKeystrokeList([key(0x04)] * 255))[0] == 255
+def test_60_keystrokes_is_the_largest_serialisable_list():
+    assert MAX_KEYSTROKES_PER_PACKET == 60
+    assert bytes(DOOMKeystrokeList([key(0x04)] * 60))[0] == 60
     with pytest.raises(ValueError):
-        bytes(DOOMKeystrokeList([key(0x04)] * 256))
+        bytes(DOOMKeystrokeList([key(0x04)] * 61))
 
 
-@pytest.mark.parametrize(("count", "chunks"), [(0, [0]), (255, [255]), (256, [255, 1]), (600, [255, 255, 90])])
-def test_split_to_serialise_chunks_at_255(count, chunks):
+@pytest.mark.parametrize(("count", "chunks"), [(0, [0]), (60, [60]), (61, [60, 1]), (150, [60, 60, 30])])
+def test_split_to_serialise_chunks_at_60(count, chunks):
     """Every chunk must serialise, and together they keep every keystroke in order."""
     original = DOOMKeystrokeList([key(i % 200 + 1) for i in range(count)])
     parts = original.split_to_serialise()
@@ -154,18 +156,56 @@ def test_split_to_serialise_chunks_at_255(count, chunks):
     assert [k.keys for p in parts for k in p] == [k.keys for k in original]
 
 
-# ── Spacecraft Command Format spec (not implemented yet) ────────────────────
-
-SPEC_MAX_KEYSTROKES = 60  # 245-byte ORCA body: 1 cmd + 4 header + 60 * 4
+# ── Uplink packets (DOOM Command: Keyboard 0x02 + EOF 0x04) ─────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="spec caps a keyboard packet at 60 entries; code allows 255")
-def test_spec_more_than_60_keystrokes_is_rejected():
+def test_spec_example_a_then_b():
+    """The spec's example: "A" then "b" -> 0x02040000, 0x00050000."""
+    a = DOOMKeystroke.from_qt_keys([Qt.Key.Key_Shift, Qt.Key.Key_A])
+    b = DOOMKeystroke.from_qt_keys([Qt.Key.Key_B])
+    assert bytes(a) + bytes(b) == bytes.fromhex("02040000 00050000")
+
+
+def test_spec_example_ctrl_shift_a_f_up():
+    """The spec's example: ctrl-shift-A-F-Up Arrow -> 0x03040952."""
+    ks = DOOMKeystroke.from_qt_keys(
+        [Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_A, Qt.Key.Key_F, Qt.Key.Key_Up]
+    )
+    assert bytes(ks) == bytes.fromhex("03040952")
+
+
+def test_short_recording_is_one_keyboard_packet_then_eof():
+    packets = DOOMKeystrokeList([key(0x04), key(0x05)]).to_packets(batch=7)
+    assert packets == [
+        bytes([0x02, 7, 0, 1, 2]) + bytes.fromhex("00040000 00050000"),
+        bytes([0x04, 7]),
+    ]
+
+
+def test_long_recording_is_split_with_sequence_numbers():
+    packets = DOOMKeystrokeList([key(0x04)] * 150).to_packets(batch=3)
+    *keyboard, eof = packets
+    # [cmd][batch][seq][seq count][size]
+    assert [p[:5] for p in keyboard] == [
+        bytes([0x02, 3, 0, 3, 60]),
+        bytes([0x02, 3, 1, 3, 60]),
+        bytes([0x02, 3, 2, 3, 30]),
+    ]
+    assert eof == bytes([0x04, 3])
+
+
+def test_full_packet_fits_the_orca_payload_limit():
+    """ORCA forwards at most 246 bytes (command byte + 245-byte body)."""
+    packets = DOOMKeystrokeList([key(0x04)] * 60).to_packets(batch=0)
+    assert len(packets[0]) == 1 + 4 + 60 * 4 == 245
+    assert len(packets[0]) <= 246
+
+
+def test_batch_must_fit_in_a_byte():
     with pytest.raises(ValueError):
-        bytes(DOOMKeystrokeList([key(0x04)] * (SPEC_MAX_KEYSTROKES + 1)))
+        DOOMKeystrokeList([key(0x04)]).to_packets(batch=256)
 
 
-@pytest.mark.xfail(strict=True, reason="spec caps a keyboard packet at 60 entries; code splits at 255")
-def test_spec_split_to_serialise_chunks_at_60():
-    parts = DOOMKeystrokeList([key(0x04)] * 150).split_to_serialise()
-    assert [len(p) for p in parts] == [60, 60, 30]
+def test_more_than_255_packets_is_rejected():
+    with pytest.raises(ValueError):
+        DOOMKeystrokeList([key(0x04)] * (255 * 60 + 1)).to_packets(batch=0)
