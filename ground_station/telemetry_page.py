@@ -660,9 +660,12 @@ class TelemetryPage(QWidget):
         age = time.time() - stamps[-1]
         interval = float(np.median(np.diff(stamps))) if len(stamps) > 1 else 0.0
         state = "LIVE" if 0 <= age <= max(STALE_AFTER_S, 3 * interval) else "STALE"
-        self.set_status(
-            state, f"Last packet {format_age(age)}  ·  {len(self.log)} packets"
-        )
+        detail = f"Last packet {format_age(age)}  ·  {len(self.log)} packets"
+        skipped = self.log.skipped_rows
+        if skipped:
+            rows = "row" if skipped == 1 else "rows"
+            detail += f"  ·  {skipped} unreadable {rows} skipped"
+        self.set_status(state, detail)
 
     def set_status(self, state: str, detail: str) -> None:
         self.status.setText(
