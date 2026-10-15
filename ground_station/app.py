@@ -1,10 +1,9 @@
 import signal
 import sys
 import time
-
-from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
-from messages import DOOMKeystroke, DOOMKeystrokeList
 from pathlib import Path
+
+import numpy as np
 
 # import sdl3
 from PyQt6 import QtGui
@@ -13,6 +12,9 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QFrame,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -24,12 +26,11 @@ from PyQt6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
     QWidget,
-    QGraphicsScene,
-    QGraphicsView,
-    QGraphicsPixmapItem
-    
 )
-import numpy as np
+
+from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
+from messages import DOOMKeystroke, DOOMKeystrokeList
+
 
 def perf_counter_ms() -> int:
     return time.perf_counter_ns() // 1_000_000
@@ -151,7 +152,7 @@ class VideoFeedPage(QWidget):
         self.view.fitInView(self.view.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     
-    def colormap_from_hex(self, filename: str) -> dict[int : list[QtGui.QRgb]]:
+    def colormap_from_hex(self, filename: str) -> dict[int, list[int]]:
         """
         Create a Dict of Lists of QRgb colors from a list of hex color strings.
 
@@ -176,13 +177,15 @@ class VideoFeedPage(QWidget):
                 end = 256 * (key+1)
                 while(end<=len(hex_values)):
                     palette_values = hex_values[start:end]
-                    qrgb_list: list[QtGui.QRgb] = []
+                    # PyQt6 has no QRgb type: each colour is a plain int packed as
+                    # 0xAARRGGBB (qRgb() sets alpha to 0xFF), as setColorTable() expects
+                    argb_colors: list[int] = []
                     for hex_str in palette_values:
                         # Parse hex to integer
                         rgb_int = int(hex_str, 16)
                         qrgb = QtGui.qRgb((rgb_int >> 16) & 0xFF, (rgb_int >> 8) & 0xFF, rgb_int & 0xFF)
-                        qrgb_list.append(qrgb)
-                    palette_dict[key] = qrgb_list
+                        argb_colors.append(qrgb)
+                    palette_dict[key] = argb_colors
                     #increment through list of hex values 
                     key +=1
                     start = end
@@ -329,8 +332,8 @@ class KeyRecordingPage(QWidget):
                 label.append(HID_TO_DESCRIPTION[key])
             labels.append("-".join(label))
 
-        for label in labels:
-            item = QtGui.QStandardItem(label)
+        for text in labels:
+            item = QtGui.QStandardItem(text)
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
             item.setFont(BODY_FONT)
             head.appendRow(item)
