@@ -4,10 +4,15 @@ Ground station software for playing and displaying DOOM on a balloon
 ## Development
 [![CI](https://github.com/UVicSatelliteDesign/uvsd-doom-gs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/UVicSatelliteDesign/uvsd-doom-gs/actions/workflows/ci.yml)
 
-Requires [uv](https://docs.astral.sh/uv/). CI runs the same two commands on every push and PR to `main`:
+To run the app, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run
+```bash
+uv run ground_station/app.py
+```
+
+To test the code, run:
 
 ```bash
-uv run ruff check .     # lint (add --fix to apply safe fixes)
-uv run mypy             # type check (config in pyproject.toml)
-uv run pytest           # tests in tests/, no display needed
+uv run ruff check .     # Lint (add --fix to apply safe fixes)
+uv run mypy             # Type check
+uv run pytest           # Checks tests in tests/
 ```
