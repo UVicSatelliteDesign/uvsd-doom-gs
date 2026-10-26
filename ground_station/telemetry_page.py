@@ -6,7 +6,6 @@ The data side (schema, CSV reading, conversions, flight events) lives in
 telemetry.py; this module only lays out and draws.
 """
 
-import html
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path

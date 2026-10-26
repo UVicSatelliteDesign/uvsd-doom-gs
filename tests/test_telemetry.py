@@ -46,8 +46,6 @@ def append(path, text: str) -> None:
 # ── Schema ───────────────────────────────────────────────────────────────────
 
 
-
-
 def test_fields_drawn_on_the_same_plot_share_a_unit():
     units_by_group: dict[str, set[str]] = {}
     for field in FIELDS:
@@ -138,11 +136,11 @@ def test_format_coordinate_adds_the_hemisphere():
     ("seconds", "text"),
     [
         (0.4, "just now"),
-        (59.9, "59 s ago"),
+        (59.9, "59 sec ago"),
         (60, "1 min ago"),
         (3599, "59 min ago"),
-        (7200, "2 h ago"),
-        (3 * 86_400 + 5, "3 d ago"),
+        (7200, "2 hr ago"),
+        (3 * 86_400 + 5, "3 days ago"),
         (-5, "ahead of this computer's clock"),
     ],
 )

@@ -57,6 +57,8 @@ FIELDS: tuple[Field, ...] = (
     Field("gps_course", "Course", "°", "course"),
 )
 
+# Column names and order follow the CSV schema in the "Ground Station Telemetry
+# Display" work package (CompDB17).
 COLUMNS: tuple[str, ...] = tuple(field.key for field in FIELDS)
 FIELDS_BY_KEY: dict[str, Field] = {field.key: field for field in FIELDS}
 
@@ -155,12 +157,12 @@ def format_coordinate(
 
 
 def format_age(seconds: float) -> str:
-    """How long ago something happened, e.g. "42 s ago" or "3 d ago"."""
+    """How long ago something happened, e.g. "42 sec ago" or "3 days ago"."""
     if seconds < 0:
         return "ahead of this computer's clock"
     for size, unit in ((86_400, "days"), (3600, "hr"), (60, "min"), (1, "sec")):
         if seconds >= size:
-            return f"{int(seconds // size)}{unit} ago"
+            return f"{int(seconds // size)} {unit} ago"
     return "just now"
 
 
