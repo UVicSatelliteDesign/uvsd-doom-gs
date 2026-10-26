@@ -2,7 +2,6 @@
 Tests for ground_station/telemetry.py: the telemetry CSV schema, unit
 conversions, and the incremental CSV reader.
 
-No Qt is involved, so these run headless.
 """
 
 import numpy as np
