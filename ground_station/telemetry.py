@@ -33,8 +33,6 @@ class Field:
     short: str = ""
 
 
-# The schema from the work package, in its column order. Parsing, the plots
-# and the local test-data generator (not part of this repo) all use this table.
 FIELDS: tuple[Field, ...] = (
     Field("ts", "Timestamp", "s", "time"),
     Field("battery_voltage", "Battery voltage", "V", "battery_voltage"),
