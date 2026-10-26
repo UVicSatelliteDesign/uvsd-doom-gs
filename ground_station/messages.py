@@ -9,8 +9,21 @@ from PyQt6.QtCore import Qt
 from hid import QT_TO_HID, QT_TO_HID_MODIFIERS
 
 # Uplink command bytes (Spacecraft Command Format, "Uplink Command List")
+CMD_PING = 0x01
 CMD_DOOM_KEYBOARD = 0x02
+CMD_DOOM_GAMEPAD = 0x03
 CMD_DOOM_EOF = 0x04
+CMD_REQUEST_TELEMETRY = 0x05
+CMD_ACTIVATE_BURN_WIRE = 0x06
+CMD_PLAY_DOOM = 0x07
+CMD_RESET_DOOM_BUFFER = 0x08
+CMD_RESET_DOOM = 0x09
+CMD_ACK = 0x0A
+CMD_NACK_IMAGE_DATA = 0x0B
+CMD_FRAME_RECEIVED = 0x0C
+CMD_REQUEST_GAME_STATE = 0x0D
+CMD_NACK_GAME_STATE_DATA = 0x0E
+CMD_GAME_STATE_RECEIVED = 0x0F
 
 # An ORCA-forwarded command is at most 246 bytes: 1 command byte + 245 body.
 # A keyboard body is a 4-byte header (batch #, sequence #, sequence count,
