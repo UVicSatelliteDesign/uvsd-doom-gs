@@ -158,7 +158,7 @@ def format_age(seconds: float) -> str:
     """How long ago something happened, e.g. "42 s ago" or "3 d ago"."""
     if seconds < 0:
         return "ahead of this computer's clock"
-    for size, unit in ((86_400, "d"), (3600, "h"), (60, "min"), (1, "s")):
+    for size, unit in ((86_400, "days"), (3600, "hr"), (60, "min"), (1, "sec")):
         if seconds >= size:
             return f"{int(seconds // size)}{unit} ago"
     return "just now"
