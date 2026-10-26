@@ -1,8 +1,5 @@
 """
 Telemetry downlinked from the DOOM balloon, as logged to telemetry_data.csv.
-
-This module has no Qt dependency, so the telemetry page, the tests and a
-local test-data generator (not part of this repo) can all share it.
 """
 
 import csv
