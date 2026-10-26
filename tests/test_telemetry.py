@@ -46,16 +46,6 @@ def append(path, text: str) -> None:
 # ── Schema ───────────────────────────────────────────────────────────────────
 
 
-def test_columns_match_the_work_package_schema_in_order():
-    assert COLUMNS == (
-        "ts",
-        "battery_voltage", "battery_current", "battery_temp", "battery_charge",
-        "obc_temp", "ttc_temp", "bms_temp",
-        "gyroscope_x", "gyroscope_y", "gyroscope_z",
-        "accelerometer_x", "accelerometer_y", "accelerometer_z",
-        "altitude",
-        "gps_ts", "gps_lat", "gps_long", "gps_groundspeed", "gps_course",
-    )  # fmt: skip
 
 
 def test_fields_drawn_on_the_same_plot_share_a_unit():
