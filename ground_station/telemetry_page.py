@@ -670,5 +670,5 @@ class TelemetryPage(QWidget):
     def set_status(self, state: str, detail: str) -> None:
         self.status.setText(
             f'<span style="color: {STATUS_COLORS[state]}">●</span> <b>{state}</b>'
-            f'&nbsp;&nbsp;<span style="color: {SECONDARY_TEXT}">{html.escape(detail)}</span>'
+            f'&nbsp;&nbsp;<span style="color: {SECONDARY_TEXT}">{detail}</span>'
         )
