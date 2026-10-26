@@ -162,7 +162,7 @@ def format_age(seconds: float) -> str:
         return "ahead of this computer's clock"
     for size, unit in ((86_400, "d"), (3600, "h"), (60, "min"), (1, "s")):
         if seconds >= size:
-            return f"{int(seconds // size)} {unit} ago"
+            return f"{int(seconds // size)}{unit} ago"
     return "just now"
 
 
