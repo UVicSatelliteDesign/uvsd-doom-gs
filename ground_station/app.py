@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from command_page import CommandPage
 
 # import sdl3
 from PyQt6 import QtGui
@@ -30,7 +31,6 @@ from PyQt6.QtWidgets import (
 
 from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
 from messages import DOOMKeystroke, DOOMKeystrokeList
-from command_page import CommandPage
 
 
 def perf_counter_ms() -> int:
