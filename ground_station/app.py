@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
 
 from hid import HID_MODIFIERS_TO_DESCRIPTION, HID_TO_DESCRIPTION
 from messages import DOOMKeystroke, DOOMKeystrokeList
+from telemetry_page import TelemetryPage
 
 
 def perf_counter_ms() -> int:
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(KeyRecordingPage(), "Keystrokes")
         tabs.addTab(VideoFeedPage(), "DOOM Viewer")
         tabs.addTab(QWidget(), "Satellite Status")
+        tabs.addTab(TelemetryPage(), "Telemetry")
 
         self.setCentralWidget(tabs)
 
