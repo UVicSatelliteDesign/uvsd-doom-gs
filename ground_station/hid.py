@@ -57,8 +57,9 @@ QT_TO_HID = {
     Qt.Key.Key_Backslash: 0x31,
     Qt.Key.Key_Dead_Tilde: 0x32,  # Non-US #/~
     Qt.Key.Key_Semicolon: 0x33,
-    Qt.Key.Key_QuoteLeft: 0x34,
+    Qt.Key.Key_Apostrophe: 0x34,  # ' and "
     Qt.Key.Key_QuoteDbl: 0x34,
+    Qt.Key.Key_QuoteLeft: 0x35,  # ` and ~
     Qt.Key.Key_AsciiTilde: 0x35,
     Qt.Key.Key_Comma: 0x36,
     Qt.Key.Key_Period: 0x37,

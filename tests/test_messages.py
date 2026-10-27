@@ -90,6 +90,12 @@ def test_arrow_key_labels_match_their_hid_codes():
     assert labels == {"right": "\u2192", "left": "\u2190", "down": "\u2193", "up": "\u2191"}
 
 
+def test_quote_and_backtick_keys_use_their_own_hid_codes():
+    # HID usage 0x34 is the ' " key and 0x35 the ` ~ key.
+    assert QT_TO_HID[Qt.Key.Key_Apostrophe] == QT_TO_HID[Qt.Key.Key_QuoteDbl] == 0x34
+    assert QT_TO_HID[Qt.Key.Key_QuoteLeft] == QT_TO_HID[Qt.Key.Key_AsciiTilde] == 0x35
+
+
 def test_hid_mappings_fit_in_a_byte():
     """Every mapped key code and modifier bit must fit the 1-byte wire fields."""
     assert all(0 < code <= 0xFF for code in QT_TO_HID.values())
