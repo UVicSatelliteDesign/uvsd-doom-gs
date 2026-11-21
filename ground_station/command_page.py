@@ -19,7 +19,7 @@ from messages import (
 )
 
 
-class CommandPage (QWidget):
+class CommandPage(QWidget):
     def __init__(self):
         super().__init__()
 
@@ -56,7 +56,7 @@ class CommandPage (QWidget):
         self.setLayout(layout)
 
     def send_command(self):
-            command = self.command_box.currentData()
+        command = self.command_box.currentData()
 
-            # Placeholder until command transmission implemented
-            print(f"Selected command: 0x{command:02X}")
+        # Placeholder until command transmission implemented
+        print(f"Selected command: 0x{command:02X}")
